@@ -226,8 +226,8 @@ def run(cfg: dict[str, Any]) -> dict[str, Any]:
     boot = cal.bootstrap(
         obj, pts, size, model, use_ro, c["bootstrap_samples"], c["random_seed"], probes
     )
-    # Retain the actual draws so uncertainty figures use the completed run's
-    # samples. The run manifest hashes this artifact with the other evidence.
+    # Retain actual draws so uncertainty figures use this completed run's samples.
+    # The successful-run artifact inventory includes this calibration evidence.
     np.savez_compressed(
         out / "bootstrap_samples.npz",
         params=boot["params"],

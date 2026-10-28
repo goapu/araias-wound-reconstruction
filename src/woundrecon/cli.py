@@ -176,9 +176,10 @@ def main() -> int:
         seconds = time.time() - start
         manifest.stage(name, "ok", seconds)
         logging.info("=== Stage %s finished in %.0f s ===", name, seconds)
-    # Include raw clouds, masks, depth maps, renders and archived evidence too.
-    # Logging and mutable caches are not scientific artifacts.
-    artifact_folders = STAGE_ORDER + ["provenance"]
+    # Stage names and output folders differ for calibration. Hash its parameters,
+    # diagnostics and bootstrap draws alongside geometry, renders and archived evidence.
+    artifact_folders = ["calibration" if name == "calibrate" else name for name in STAGE_ORDER]
+    artifact_folders += ["provenance"]
     manifest.finish(
         [
             path

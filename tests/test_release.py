@@ -411,6 +411,52 @@ def test_export_rejects_unreadable_pdf_before_creating_delivery(tmp_path, monkey
     assert not destination.exists()
 
 
+def test_completed_cli_run_hashes_calibration_evidence(tmp_path, monkeypatch):
+    """A successful run must bind calibration parameters and bootstrap draws to their bytes."""
+    import json
+    from types import SimpleNamespace
+
+    from woundrecon import cli, validation
+    from woundrecon.provenance import sha256_file
+
+    data, output = tmp_path / "data", tmp_path / "outputs"
+    for folder in ("checkerboard", "images"):
+        (data / folder).mkdir(parents=True)
+        (data / folder / "image.png").write_bytes(b"input hash fixture")
+    args = SimpleNamespace(
+        config=None,
+        data_root=data,
+        output_dir=output,
+        threads=1,
+        stages=cli.STAGE_ORDER.copy(),
+        source_snapshot=None,
+        verbose=False,
+    )
+    monkeypatch.setattr(cli, "parse_args", lambda: args)
+    monkeypatch.setattr(cli, "setup_logging", lambda folder, verbose: folder / "test.log")
+
+    def stage(name):
+        def run_stage(cfg):
+            folder = output / ("calibration" if name == "calibrate" else name)
+            folder.mkdir(parents=True)
+            (folder / "stage.json").write_text("{}\n")
+            if name == "calibrate":
+                (folder / "calibration.json").write_text('{"model": "k1"}\n')
+                (folder / "diagnostics.json").write_text('{"views": 2}\n')
+                np.savez_compressed(folder / "bootstrap_samples.npz", params=np.arange(6))
+
+        return SimpleNamespace(run=run_stage)
+
+    monkeypatch.setattr(cli, "get_stage", stage)
+    monkeypatch.setattr(validation, "verify_outputs", lambda *args: {"status": "passed"})
+    assert cli.main() == 0
+    manifest = json.loads((output / "run_manifest.json").read_text())
+    for name in ("calibration.json", "diagnostics.json", "bootstrap_samples.npz"):
+        key = "calibration/" + name
+        assert key in manifest["outputs_sha256"]
+        assert manifest["outputs_sha256"][key] == sha256_file(output / key)
+
+
 def test_calibration_model_subset_keeps_labels_and_bootstrap_evidence(tmp_path, monkeypatch):
     """A supported model subset must fit, label diagnostics and retain its actual bootstrap draws."""
     from woundrecon.config import load_config

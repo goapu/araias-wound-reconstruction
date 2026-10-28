@@ -1,7 +1,7 @@
 # Pipeline configuration.
 # Paths are resolved relative to the repository root unless absolute.
-# Every stage reads its inputs from, and writes its outputs to, `output_dir`,
-# so stages can be re-run independently for debugging.
+# Stages write artifacts under `output_dir`; later stages read upstream artifacts.
+# Downstream suffix reruns require verified, unchanged upstream evidence.
 
 data:
   root: ".."                      # folder that contains checkerboard/ and images/
@@ -76,7 +76,7 @@ scale:
   # 1) A fiducial marker (ArUco / AprilTag) visible in the images, side length in mm:
   marker_side_mm: null
   # 2) A known length marked in two or more photos (JSON file, path relative to the
-  #    data root; format in README "Making the outputs metric"):
+  #    data root; format in README "Physical scale"):
   reference_annotation: null
   # 3) Or a known distance between two 3D points of the reconstruction
   #    (coordinates as in outputs/dense/dense.ply):
@@ -86,7 +86,7 @@ scale:
 measure:
   # All distances are fractions of the length of the red wound region, so the
   # definitions do not depend on unknown scale; discretization effects remain.
-  a_min: 22.0                     # CIELAB a* threshold for red granulation tissue
+  a_min: 22.0                     # heuristic CIELAB a* threshold for red phantom regions
   ring_inner: 0.04                # periwound ring used to fit the intact reference surface
   ring_outer: 0.13
   crater_depth: 0.014             # vertices this far below the reference join the wound ...
@@ -97,4 +97,4 @@ measure:
   sensitivity:                    # one-at-a-time changes reported as a sensitivity range
     a_min_delta: 2.0
     distance_scales: [0.8, 1.2]
-  validation_footprint_cell: 0.01 # footprint grid for the SfM-to-mesh check, fraction of wound length
+  validation_footprint_cell: 0.01 # compatibility setting; footprint membership uses exact triangles

@@ -11,11 +11,11 @@ descriptors include their sensitivity to the boundary and reference definition.
 |---|---|
 | Calibration | 22 / 22 boards detected; fit RMS 0.53 px, held-out RMS 0.61 px |
 | Registration | 23 / 23 wound photos |
-| Point clouds | 12,410 sparse points (3,524 seen in ≥ 3 views); 2.61 M dense points |
+| Point clouds | 12,403 sparse points (3,509 seen in ≥ 3 views); 2.65 M dense points |
 | Dense support | 21 / 23 reference depth maps accepted |
-| Mesh | 151,884 vertices; 286,177 triangles; 1 component; 0 open edges touching the saved wound mask |
-| Internal consistency | Sparse points over the mesh footprint lie a median 0.25% of wound length from the mesh |
-| Software checks | 55 local tests passing; lint and formatting clean |
+| Mesh | 158,786 vertices; 298,961 triangles; 1 component; 0 open edges touching the saved wound mask |
+| Internal consistency | Sparse points over the mesh footprint lie a median 0.26% of wound length from the mesh |
+| Software checks | 56 local tests passing; lint and formatting clean |
 
 No scene reference with a verified physical size was established. Outputs retain
 reconstruction units; see [Physical scale](#physical-scale). The wound boundary and
@@ -42,7 +42,7 @@ Place the task data next to the repository (it is not included here):
 workspace/
 ├── checkerboard/                    # 22 calibration photos
 ├── images/                          # 23 wound photos
-└── araias-moulage-reconstruction/   # this repository
+└── araias-wound-reconstruction/     # this repository
 ```
 
 Install and run from the repository folder:
@@ -56,7 +56,7 @@ python3.13 -m venv .venv
 .venv/bin/wound-verify      --output-dir outputs --data-root ..
 ```
 
-The reference run recorded 13.5 minutes of stage computation, excluding startup
+The reference run recorded 14.1 minutes of stage computation, excluding startup
 and verification overhead. Runtime depends on hardware and settings. Logs and
 `outputs/run_manifest.json` record stage outcomes/times, source/input/artifact hashes,
 settings and library versions. Numerical reproduction ends with `wound-verify`;
@@ -103,17 +103,17 @@ pose/test partitions.
 
 ### Wound measurements
 
-Relative to nominal wound length L = 3.721 reconstruction units:
+Relative to nominal wound length L = 3.718 reconstruction units:
 
 | Descriptor | Nominal | Range across definition variants |
 |---|---|---|
-| Width | 0.519 L | 0.499–0.519 L |
-| Projected area | 0.383 L² | 0.327–0.388 L² |
-| Depth (99th percentile) | 0.0326 L | 0.0295–0.0430 L |
-| Volume below the fitted reference | 0.0069 L³ | 0.0050–0.0097 L³ |
+| Width | 0.517 L | 0.508–0.518 L |
+| Projected area | 0.384 L² | 0.323–0.394 L² |
+| Depth (99th percentile) | 0.0327 L | 0.0291–0.0473 L |
+| Volume below the fitted reference | 0.0070 L³ | 0.0047–0.0111 L³ |
 
-Each variant is normalized by its own wound length. Width varies by about 3.8%;
-projected area changes by -14.5% to +1.5% from nominal. Depth and volume are more
+Each variant is normalized by its own wound length. Width varies by about 1.8%;
+projected area changes by -15.8% to +2.8% from nominal. Depth and volume are more
 sensitive to the counterfactual reference surface. The ranges are one-at-a-time
 definition sensitivity, not confidence intervals. Depth is measured along the
 canonical z axis; P99 is the projected-area-weighted percentile of clipped triangle
@@ -206,7 +206,7 @@ Design choices:
 - **Observation support.** Unsupported regions stay open; release fails if an open
   edge touches the saved heuristic wound mask. This is a coverage check.
 - **Normals and storage.** Normals must be finite/unit and agree with triangle winding
-  on at least 95% of faces and area (observed: 99.59% / 99.68%). PLY stores XYZ as
+  on at least 95% of faces and area (observed: 99.61% / 99.70%). PLY stores XYZ as
   float64, normals as float32 and RGB as uint8; narrow triangles survive translation.
 - **Traceable reruns.** Caches are keyed by input bytes, settings, code and library
   versions. A partial rerun (`--stages render`, or any suffix from `dense` onwards) is
@@ -222,7 +222,7 @@ Design choices:
 .venv/bin/ruff format --check src tests scripts
 ```
 
-The 55 local tests use synthetic data only. They cover calibration/model subsets,
+The 56 local tests use synthetic data only. They cover calibration/model subsets,
 camera projection, horizontal/vertical stereo, bundle-adjustment guards, TSDF support
 and normals, clipped integration, scale, PLY precision, cache invalidation, incomplete
 run rejection and PDF/source packaging. CI uses the same commands without task images.
