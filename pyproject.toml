@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools==84.1.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "araias-wound-reconstruction"
+version = "0.1.0"
+description = "CPU photogrammetry with calibrated cameras, supported surfaces and auditable outputs"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [{name = "Dilip Goswami"}]
+dependencies = [
+  "numpy==2.3.1", "scipy==1.18.1", "opencv-python-headless==5.0.0.93",
+  "scikit-image==0.26.0", "matplotlib==3.11.2", "pyyaml==6.0.3",
+  "pillow==13.0.0", "pypdf==6.21.2"
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1", "ruff==0.17.2"]
+
+[project.scripts]
+wound-reconstruct = "woundrecon.cli:main"
+wound-verify = "woundrecon.validation:main"
+wound-export = "woundrecon.delivery:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+woundrecon = ["resources/*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP", "D1"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = ["D1"]

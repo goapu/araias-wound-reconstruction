@@ -1,0 +1,100 @@
+# Pipeline configuration.
+# Paths are resolved relative to the repository root unless absolute.
+# Every stage reads its inputs from, and writes its outputs to, `output_dir`,
+# so stages can be re-run independently for debugging.
+
+data:
+  root: ".."                      # folder that contains checkerboard/ and images/
+  checkerboard_dir: "checkerboard"
+  images_dir: "images"
+
+output_dir: "outputs"
+
+camera:
+  # Native sensor frame of the iPhone 13 Pro Max main camera (width, height).
+  native_size: [4032, 3024]
+  # Physical priors, used only for sanity checks, never as constraints.
+  focal_length_mm: 5.7
+  pixel_pitch_um: 1.9
+
+calibration:
+  pattern_size: [9, 6]            # inner corners (cols, rows)
+  square_size: 1.0                # unknown in mm; intrinsics are scale-free
+  detect_scale: 0.5               # corner detection on a downscaled copy, then refined
+  subpix_window: 11               # half-size of the sub-pixel refinement window (px)
+  models: ["k1", "k1k2", "k1k2k3", "opencv5", "rational"]
+  bootstrap_samples: 200
+  random_seed: 0
+
+sfm:
+  # All pixel thresholds are in full-resolution native pixels.
+  work_scale: 0.5                 # features are detected at half resolution
+  sift_features: 12000
+  ratio_test: 0.8
+  min_inliers: 60                 # minimum verified matches to keep an image pair
+  ransac_threshold_px: 2.0        # essential-matrix (Sampson) threshold
+  pnp_threshold_px: 6.0
+  min_pnp_inliers: 40
+  min_triangulation_angle_deg: 2.0
+  max_reprojection_error_px: 4.0
+  valid_radius_scale: 1.25        # keep keypoints within 1.25 x the checkerboard-covered radius
+  orientation_margin: 0.2         # re-orient an image only if the other rotation fits >20 % better
+  refine_intrinsics: auto         # auto: choose A (checkerboard) or B (self-calibrated) on held-out images
+  refine_parameters: ["f", "k1", "k2"]
+  heldout:                        # held-out wound images for the camera-model choice
+    every: 5                      # images 1, 6, 11, ... are held out
+    offset: 1
+    min_votes: 2
+    min_associations: 60
+    bootstrap: 2000
+    seed: 0
+
+dense:
+  work_scale: 0.5                 # depth maps are computed at half resolution
+  neighbours_per_view: 6          # stereo partners per reference image
+  min_pair_angle_deg: 6.0         # parallax range of a stereo pair (at the scene centre)
+  max_pair_angle_deg: 40.0
+  num_disparities: 384            # upper bound; the actual range comes from sparse points
+  block_size: 7
+  uniqueness: 5
+  clahe_clip: 3.0                 # contrast enhancement before matching (0 = off)
+  min_consistent_views: 2         # distinct stereo pairs that must agree per pixel
+  depth_rel_tolerance: 0.01       # relative depth agreement tolerance
+  fusion_voxel_rel: 0.0008        # point-fusion voxel, relative to the scene diagonal
+
+mesh:
+  voxel_size_rel: 0.0016          # TSDF voxel, relative to the scene diagonal (about 1/600 of the scene)
+  texture_scale: 0.5              # image scale used to colour the mesh vertices
+  truncation_voxels: 4
+  min_weight: 2                   # voxels must be observed by >= 2 depth maps
+  keep_fraction: 0.02             # drop mesh fragments smaller than 2 % of the largest
+
+scale:
+  # Metric scale needs a reference of known size; without one it is reported as
+  # unknown and all outputs keep the arbitrary reconstruction unit. Each source
+  # is checked before use and rejected with a logged reason if it fails.
+  # 1) A fiducial marker (ArUco / AprilTag) visible in the images, side length in mm:
+  marker_side_mm: null
+  # 2) A known length marked in two or more photos (JSON file, path relative to the
+  #    data root; format in README "Making the outputs metric"):
+  reference_annotation: null
+  # 3) Or a known distance between two 3D points of the reconstruction
+  #    (coordinates as in outputs/dense/dense.ply):
+  known_length_mm: null
+  reference_points: null          # [[x, y, z], [x, y, z]]
+
+measure:
+  # All distances are fractions of the length of the red wound region, so the
+  # definitions do not depend on unknown scale; discretization effects remain.
+  a_min: 22.0                     # CIELAB a* threshold for red granulation tissue
+  ring_inner: 0.04                # periwound ring used to fit the intact reference surface
+  ring_outer: 0.13
+  crater_depth: 0.014             # vertices this far below the reference join the wound ...
+  crater_reach: 0.095             # ... if they lie this close to the red wound bed
+  reference_surface_order: auto   # polynomial order 1-4, or auto (leave-one-sector-out cross-validation)
+  reference_orders: [1, 2, 3, 4]
+  cv_sectors: 8
+  sensitivity:                    # one-at-a-time changes reported as a sensitivity range
+    a_min_delta: 2.0
+    distance_scales: [0.8, 1.2]
+  validation_footprint_cell: 0.01 # footprint grid for the SfM-to-mesh check, fraction of wound length
