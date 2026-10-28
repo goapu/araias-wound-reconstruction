@@ -411,8 +411,8 @@ def test_export_rejects_unreadable_pdf_before_creating_delivery(tmp_path, monkey
     assert not destination.exists()
 
 
-def test_completed_cli_run_hashes_calibration_evidence(tmp_path, monkeypatch):
-    """A successful run must bind calibration parameters and bootstrap draws to their bytes."""
+def test_completed_cli_run_hashes_calibration_and_render_evidence(tmp_path, monkeypatch):
+    """A successful run must bind calibration evidence and inspection renders to their bytes."""
     import json
     from types import SimpleNamespace
 
@@ -435,15 +435,20 @@ def test_completed_cli_run_hashes_calibration_evidence(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "parse_args", lambda: args)
     monkeypatch.setattr(cli, "setup_logging", lambda folder, verbose: folder / "test.log")
 
+    # Folder names written by the real calibrate and render stages.
+    folders = {"calibrate": "calibration", "render": "renders"}
+
     def stage(name):
         def run_stage(cfg):
-            folder = output / ("calibration" if name == "calibrate" else name)
+            folder = output / folders.get(name, name)
             folder.mkdir(parents=True)
             (folder / "stage.json").write_text("{}\n")
             if name == "calibrate":
                 (folder / "calibration.json").write_text('{"model": "k1"}\n')
                 (folder / "diagnostics.json").write_text('{"views": 2}\n')
                 np.savez_compressed(folder / "bootstrap_samples.npz", params=np.arange(6))
+            if name == "render":
+                (folder / "01_textured_top.png").write_bytes(b"render fixture")
 
         return SimpleNamespace(run=run_stage)
 
@@ -451,8 +456,13 @@ def test_completed_cli_run_hashes_calibration_evidence(tmp_path, monkeypatch):
     monkeypatch.setattr(validation, "verify_outputs", lambda *args: {"status": "passed"})
     assert cli.main() == 0
     manifest = json.loads((output / "run_manifest.json").read_text())
-    for name in ("calibration.json", "diagnostics.json", "bootstrap_samples.npz"):
-        key = "calibration/" + name
+    expected = [
+        "calibration/calibration.json",
+        "calibration/diagnostics.json",
+        "calibration/bootstrap_samples.npz",
+        "renders/01_textured_top.png",
+    ]
+    for key in expected:
         assert key in manifest["outputs_sha256"]
         assert manifest["outputs_sha256"][key] == sha256_file(output / key)
 

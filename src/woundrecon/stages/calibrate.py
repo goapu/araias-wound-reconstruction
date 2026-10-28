@@ -180,7 +180,7 @@ def run(cfg: dict[str, Any]) -> dict[str, Any]:
         OSError: Required inputs or output paths cannot be accessed.
     """
     plots.apply_style()
-    out = stage_dir(cfg, "calibration")
+    out = stage_dir(cfg, "calibrate")
     c = cfg["calibration"]
     models = [name for name in MODEL_ORDER if name in c["models"]]
     size = tuple(cfg["camera"]["native_size"])  # (width, height)

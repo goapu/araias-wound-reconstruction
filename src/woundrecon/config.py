@@ -15,6 +15,8 @@ from typing import Any
 
 import yaml
 
+from .stages import STAGE_OUTPUT_FOLDERS
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = REPO_ROOT / "configs" / "default.yaml"
 if not DEFAULT_CONFIG.is_file():
@@ -61,7 +63,7 @@ def load_config(
 
 def stage_dir(cfg: dict[str, Any], stage: str) -> Path:
     """Create (if needed) and return the output folder of a pipeline stage."""
-    path = cfg["paths"]["output"] / stage
+    path = cfg["paths"]["output"] / STAGE_OUTPUT_FOLDERS.get(stage, stage)
     path.mkdir(parents=True, exist_ok=True)
     return path
 

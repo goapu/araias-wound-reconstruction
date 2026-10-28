@@ -336,6 +336,36 @@ def test_ba_rejects_nonfinite_and_records_status():
     assert {"status", "stopped", "accepted", "max_nfev"} <= set(stats) and stats["accepted"]
 
 
+def test_ba_rejection_restores_refined_intrinsics(monkeypatch):
+    """A rejected self-calibration must leave focal length, principal point and poses unchanged."""
+    cam = Camera(800.0, 800.0, 400.0, 300.0, np.zeros(5), 800, 600)
+    rng = np.random.default_rng(4)
+    P = rng.uniform([-0.5, -0.5, 3.0], [0.5, 0.5, 4.0], (60, 3))
+    prob = ba.BAProblem(
+        np.zeros((2, 3)),
+        np.array([[0, 0, 0], [-0.3, 0, 0.0]]),
+        P + 0.01,  # perturbed points give the solver a non-trivial step
+        np.repeat([0, 1], 60),
+        np.tile(np.arange(60), 2),
+        np.vstack([cam.project(P), cam.project(P + [-0.3, 0, 0])]),
+        cam.copy(),
+    )
+    before = prob.camera.copy(), prob.rvecs.copy(), prob.tvecs.copy(), prob.points.copy()
+    monkeypatch.setattr(ba, "acceptance_problems", lambda *args, **kwargs: ["forced rejection"])
+    stats = ba.solve(prob, free=("f", "cx", "k1"), max_nfev=50)
+    assert not stats["accepted"]
+    restored = prob.camera
+    assert (restored.fx, restored.fy, restored.cx, restored.cy) == (
+        before[0].fx,
+        before[0].fy,
+        before[0].cx,
+        before[0].cy,
+    )
+    assert np.array_equal(restored.dist, before[0].dist)
+    for now, then in zip((prob.rvecs, prob.tvecs, prob.points), before[1:], strict=True):
+        assert np.array_equal(now, then)
+
+
 # --------------------------------------------------------------------------- #
 # Calibration hold-out on disjoint corners; synthetic camera recovery
 # --------------------------------------------------------------------------- #

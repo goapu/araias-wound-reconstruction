@@ -7,6 +7,10 @@ from checkerboard photos and reconstructs a silicone wound moulage on a forearm 
 sparse and dense point clouds and a mesh with vertex colours. Experimental wound
 descriptors include their sensitivity to the boundary and reference definition.
 
+Geometry and numerical tables describe the archived reference run (`175d788`),
+matching the accompanying report and models. Software checks describe the current
+source revision; see [Reference results and revisions](#reference-results-and-revisions).
+
 | Result | Value |
 |---|---|
 | Calibration | 22 / 22 boards detected; fit RMS 0.53 px, held-out RMS 0.61 px |
@@ -15,7 +19,7 @@ descriptors include their sensitivity to the boundary and reference definition.
 | Dense support | 21 / 23 reference depth maps accepted |
 | Mesh | 158,786 vertices; 298,961 triangles; 1 component; 0 open edges touching the saved wound mask |
 | Internal consistency | Sparse points over the mesh footprint lie a median 0.26% of wound length from the mesh |
-| Software checks | 56 local tests passing; lint and formatting clean |
+| Software checks | 73 local tests passing; lint and formatting clean |
 
 No scene reference with a verified physical size was established. Outputs retain
 reconstruction units; see [Physical scale](#physical-scale). The wound boundary and
@@ -151,9 +155,11 @@ views are `01_textured_top.png`, `02_geometry_oblique.png` and
 Calibrated monocular geometry has an arbitrary similarity transform. Scaling the
 scene and camera positions together preserves image projections. A verified length
 sets metric scale; it does not establish shape accuracy. The checkerboard square
-size was unspecified, and no verified dimension was established in the wound scene.
-The eight-dictionary ArUco/AprilTag search found no detections; it does not rule out
-uncoded references.
+size was unspecified, and the board does not appear in the wound photos. All 23 wound
+photos were inspected visually: they show the forearm, the silicone moulage and the
+table, with no ruler, marker or other object of verified size. An automatic search
+over eight ArUco/AprilTag dictionaries also found no markers. A manufacturer dimension
+of the moulage, or one caliper measurement between features on it, would set the scale.
 
 To make the outputs metric, set one source in `configs/default.yaml` and run the full
 pipeline again:
@@ -189,7 +195,7 @@ error propagates to about 2% in area and 3% in volume, before other errors.
 | `audit` | Checks resolution, orientation, colour profile, exposure, sharpness and highlights |
 | `calibrate` | Detects corners, compares five lens models on held-out views, bootstraps uncertainty |
 | `sfm` | RootSIFT matching, verified tracks, incremental registration, robust bundle adjustment; tests fixed vs. refined intrinsics on held-out photos |
-| `dense` | Rectified SGBM stereo with six partners per view; keeps depths supported by two distinct pairs, which share a reference image and are correlated |
+| `dense` | Rectified SGBM stereo targeting six usable partners per view, replacing skipped/empty pairs from ranked reserves; keeps depths supported by two distinct pairs, which share a reference image and are correlated |
 | `mesh` | TSDF fusion and marching cubes; keeps a face only where all eight voxel corners were observed by at least two depth maps; colours from the photos in linear light |
 | `scale` | Searches for a scale reference, applies it if valid, aligns to the anatomical frame |
 | `measure` | Estimates heuristic wound labels, selects a periwound reference by spatial cross-validation, integrates descriptors and tests alternative definitions |
@@ -222,10 +228,14 @@ Design choices:
 .venv/bin/ruff format --check src tests scripts
 ```
 
-The 56 local tests use synthetic data only. They cover calibration/model subsets,
+The 73 local tests use synthetic data only. They cover calibration/model subsets,
 camera projection, horizontal/vertical stereo, bundle-adjustment guards, TSDF support
 and normals, clipped integration, scale, PLY precision, cache invalidation, incomplete
-run rejection and PDF/source packaging. CI uses the same commands without task images.
+run rejection, actual rendering and screenshot-tamper detection, and PDF/source
+packaging. Bundle-adjustment tests include rejected intrinsics, unsuccessful solver
+statuses, non-finite candidates and interrupted validation. CI uses the same commands
+without task images. Dense-stage regressions cover reserve partners, empty depth maps
+and exhausted candidate sets without fabricating support.
 Hosted status applies to the corresponding pushed commit.
 
 ## Packaging results
@@ -237,7 +247,8 @@ Package a verified run with an existing PDF:
   --report /path/to/report.pdf --dest submission
 ```
 
-The exporter validates the run, PDF and screenshots, then creates the PDF copy,
+Use a report whose metrics describe the run being exported. The exporter validates
+the run, PDF and screenshots, then creates the PDF copy,
 source/model ZIPs, inspection images, metrics and SHA-256 inventory in `submission/`.
 The source-checkout equivalent is `scripts/export_submission.py`.
 
@@ -263,6 +274,44 @@ src/woundrecon/
 tests/                       synthetic unit and regression tests
 scripts/                     source-checkout wrappers for the installed commands
 ```
+
+## Reference results and revisions
+
+The archived models, inspection views and report correspond to commit `175d788`;
+verify those exact outputs with that source revision. Current source must be run
+into a separate output directory because its source identity differs.
+
+- Bundle-adjustment candidates are validated on separate storage before updating
+  the shared camera, poses or points. Rejection leaves all three unchanged; the
+  retained RMS and candidate RMS are reported separately. Negative solver statuses
+  are rejected. The reference run records no rejected adjustment.
+- Stage writers and artifact inventories share one directory mapping. Successful
+  and failed runs hash existing evidence under `calibration/` and `renders/`,
+  including PNGs and bootstrap draws. A failed run remains ineligible for release.
+- Dense matching retains ranked reserve views until six usable partners are found
+  or candidates are exhausted. A fixed candidate budget previously lost a usable
+  depth map after rectification failures; a fresh run developed a three-edge hole
+  in the saved wound mask and was correctly blocked. Fallback preserves the existing
+  disparity, per-pixel agreement and TSDF support requirements.
+
+The current source completed a fresh eight-stage validation in 14.1 minutes of
+stage computation, with no reused stages. All output hashes and geometry checks
+passed; modifying a copied inspection PNG was rejected by verification.
+
+| Evidence | Archived reference (`175d788`) | Current validation |
+|---|---|---|
+| Registered photographs | 23 / 23 | 23 / 23 |
+| Raw sparse landmarks | 12,403 | 12,392 |
+| Accepted depth maps / dense points | 21 / 2,647,657 | 22 / 2,894,366 |
+| Mesh vertices / triangles | 158,786 / 298,961 | 155,647 / 292,891 |
+| Open edges touching saved wound mask | 0 | 0 |
+| Relative depth P99 / volume | 0.0327 L / 0.0070 L³ | 0.0301 L / 0.0059 L³ |
+
+The fresh depth and volume differ by -8.1% and -14.9% from the reference.
+Additional stereo support changes the surface and fitted periwound reference;
+these differences do not establish improved physical accuracy. Both runs retain
+uncertain descriptors and unresolved metric scale. The accompanying report and
+models remain the archived reference outputs.
 
 ## Limitations
 

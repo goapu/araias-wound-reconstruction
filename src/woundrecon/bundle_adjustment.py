@@ -23,7 +23,8 @@ Intrinsic parameters that may be refined (self-calibration):
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Any
 
 import numpy as np
 from scipy.optimize import least_squares
@@ -159,7 +160,7 @@ def solve(
     loss: str = "soft_l1",
     f_scale_px: float = 2.0,
     max_nfev: int | None = 100,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     """Jointly refine camera poses, world points and optional shared intrinsics.
 
     Args:
@@ -171,9 +172,10 @@ def solve(
         max_nfev: Evaluation budget; None delegates the budget to SciPy.
 
     Returns:
-        Solver status, acceptance decision, before/after RMS in pixels and final
-        intrinsics. Accepted results update problem in place; rejected results
-        restore its initial parameters.
+        Solver status, acceptance decision, retained before/after RMS in pixels,
+        candidate RMS and final intrinsics. Accepted results update problem in
+        place; rejected results leave its initial parameters unchanged. A
+        non-finite candidate RMS is reported as None for JSON serialization.
 
     Raises:
         ValueError: A free intrinsic name is unsupported or solver inputs are invalid.
@@ -207,23 +209,45 @@ def solve(
         max_nfev=max_nfev,
         verbose=0,
     )
-    f_before = problem.camera.fx
-    _write_back(problem, free, result.x)
-    r1 = residuals(problem, free)
+    # Focal length is parameterized relative to the input camera. Validate on
+    # independent mutable storage so rejection or a validation exception cannot
+    # alter that base camera, poses or points held by the reconstruction.
+    candidate = replace(
+        problem,
+        rvecs=problem.rvecs.copy(),
+        tvecs=problem.tvecs.copy(),
+        points=problem.points.copy(),
+        camera=problem.camera.copy(),
+    )
+    _write_back(candidate, free, result.x)
+    r1 = residuals(candidate, free)
     rms1 = float(np.sqrt(np.mean(np.sum(r1**2, axis=1))))
-    problems = acceptance_problems(problem, result.x, rms0, rms1, problem.camera.fx / f_before)
-    if problems:  # keep the state from before this adjustment
-        _write_back(problem, free, x0)
+    focal_ratio = candidate.camera.fx / problem.camera.fx
+    problems = acceptance_problems(candidate, result.x, rms0, rms1, focal_ratio)
+    if result.status < 0:
+        problems.append(f"solver failed with status {result.status}: {result.message}")
+    if problems:
         log.warning("BA result rejected (%s); previous state kept", "; ".join(problems))
-    # SciPy status: 0 = evaluation cap reached, 1-4 = a convergence tolerance was met.
-    stopped = "evaluation cap reached" if result.status == 0 else "converged (tolerance met)"
+    else:
+        # Apply once against the unchanged input intrinsics; applying to the
+        # candidate again would multiply the relative focal scale twice.
+        _write_back(problem, free, result.x)
+    retained_rms = rms0 if problems else rms1
+    # SciPy: negative = unsuccessful termination, 0 = budget exhausted, 1-4 =
+    # convergence. A budget-limited candidate still needs every acceptance guard.
+    if result.status < 0:
+        stopped = "solver failed"
+    elif result.status == 0:
+        stopped = "evaluation cap reached"
+    else:
+        stopped = "converged (tolerance met)"
     log.info(
         "BA: %d obs, %d points, %d cameras | RMS %.3f -> %.3f px | nfev %d/%s | %s",
         len(problem.obs),
         len(problem.points),
         len(problem.rvecs),
         rms0,
-        rms1,
+        retained_rms,
         result.nfev,
         max_nfev,
         stopped,
@@ -231,7 +255,8 @@ def solve(
     cam = problem.camera
     return {
         "rms_before_px": rms0,
-        "rms_after_px": rms1,
+        "rms_after_px": retained_rms,
+        "candidate_rms_px": rms1 if np.isfinite(rms1) else None,
         "nfev": int(result.nfev),
         "max_nfev": max_nfev,
         "status": int(result.status),

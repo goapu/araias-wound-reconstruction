@@ -75,7 +75,7 @@ def run(cfg: dict[str, Any]) -> dict[str, Any]:
     Raises:
         OSError: Required inputs or output paths cannot be accessed.
     """
-    out = stage_dir(cfg, "renders")
+    out = stage_dir(cfg, "render")
     o = cfg["paths"]["output"]
     scale = io_utils.load_json(o / "scale" / "scale.json")
     metric = scale["metric"]

@@ -4,6 +4,11 @@ outputs of earlier stages from ``cfg['paths']['output']``."""
 from importlib import import_module
 
 STAGE_ORDER = ["audit", "calibrate", "sfm", "dense", "mesh", "scale", "measure", "render"]
+# One layout is shared by stage writers and artifact hashing. Public stage
+# names remain stable even when the on-disk folder uses a descriptive noun.
+STAGE_OUTPUT_FOLDERS = {
+    name: {"calibrate": "calibration", "render": "renders"}.get(name, name) for name in STAGE_ORDER
+}
 
 
 def get_stage(name: str):

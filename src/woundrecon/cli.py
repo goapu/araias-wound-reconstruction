@@ -27,24 +27,15 @@ from pathlib import Path
 
 from woundrecon.config import load_config
 from woundrecon.provenance import RunManifest, portable_path, sha256_file
-from woundrecon.stages import STAGE_ORDER, get_stage
+from woundrecon.stages import STAGE_ORDER, STAGE_OUTPUT_FOLDERS, get_stage
 
-# Main outputs whose checksums are recorded in the run manifest.
-KEY_OUTPUTS = (
-    "calibration/calibration.json",
-    "sfm/sfm.npz",
-    "sfm/sfm_stats.json",
-    "dense/dense_stats.json",
-    "mesh/mesh.ply",
-    "mesh/mesh_stats.json",
-    "scale/scale.json",
-    "scale/mesh_aligned.ply",
-    "scale/dense_aligned_thinned.ply",
-    "scale/sparse_aligned.ply",
-    "scale/cameras_aligned.ply",
-    "measure/measurements.json",
-    "measure/wound_depth.ply",
-)
+
+def _artifact_paths(output: Path) -> list[Path]:
+    """Inventory stage evidence, including partial outputs after a failed stage."""
+    folders = [*STAGE_OUTPUT_FOLDERS.values(), "provenance"]
+    return sorted(
+        path for folder in folders for path in (output / folder).rglob("*") if path.is_file()
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -170,24 +161,15 @@ def main() -> int:
         except Exception as exc:  # record, then stop the run
             logging.error("Stage %s failed: %s\n%s", name, exc, traceback.format_exc())
             manifest.stage(name, "failed", time.time() - start, f"{type(exc).__name__}: {exc}")
-            manifest.finish([out / k for k in KEY_OUTPUTS])
+            manifest.finish(_artifact_paths(out))
             logging.error("Run stopped. Details: %s", portable_path(log_file))
             return 1
         seconds = time.time() - start
         manifest.stage(name, "ok", seconds)
         logging.info("=== Stage %s finished in %.0f s ===", name, seconds)
-    # Stage names and output folders differ for calibration. Hash its parameters,
-    # diagnostics and bootstrap draws alongside geometry, renders and archived evidence.
-    artifact_folders = ["calibration" if name == "calibrate" else name for name in STAGE_ORDER]
-    artifact_folders += ["provenance"]
-    manifest.finish(
-        [
-            path
-            for folder in artifact_folders
-            for path in (out / folder).rglob("*")
-            if path.is_file()
-        ]
-    )
+    # Hash every stage folder: calibration parameters, diagnostics and bootstrap
+    # draws, geometry, measurements, inspection renders and archived evidence.
+    manifest.finish(_artifact_paths(out))
     if stages == STAGE_ORDER or reused is not None:
         from woundrecon.validation import verify_outputs
 

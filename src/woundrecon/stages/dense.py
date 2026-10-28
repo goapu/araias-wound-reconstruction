@@ -65,6 +65,41 @@ def shared_point_matrix(sfm: dict[str, np.ndarray], index: list[int]) -> np.ndar
     return v @ v.T
 
 
+def _match_reference(
+    reference: int,
+    views: list[mvs.View],
+    candidates: list[int],
+    seen: list[set[int]],
+    points: np.ndarray,
+    params: mvs.StereoParams,
+    target: int,
+) -> tuple[list[np.ndarray], dict[str, dict], list[str]]:
+    """Try ranked partners until target finite depth maps or candidate exhaustion.
+
+    Points are (N, 3) in the shared SfM frame. Returned depth maps use the
+    reference's undistorted working grid and SfM length units. Geometric ranking
+    cannot predict rectification feasibility, so a skipped or entirely invalid
+    pair does not consume a usable-partner slot. Pair validity and per-pixel
+    multi-view agreement thresholds are unchanged.
+    """
+    depths, stats, partners = [], {}, []
+    ref = views[reference]
+    for neighbour in candidates:
+        common = np.array(sorted(seen[reference] & seen[neighbour]), int)
+        depth, result = mvs.pair_depth(ref, views[neighbour], points[common], params)
+        result = dict(result)
+        if "skipped" not in result and not np.isfinite(depth).any():
+            result["skipped"] = "no finite depth samples"
+        stats[views[neighbour].name] = result
+        if "skipped" in result:
+            continue
+        depths.append(depth)
+        partners.append(views[neighbour].name)
+        if len(depths) == target:
+            break
+    return depths, stats, partners
+
+
 def run(cfg: dict[str, Any]) -> dict[str, Any]:
     """Reconstruct observed dense depths from registered image pairs.
 
@@ -107,7 +142,7 @@ def run(cfg: dict[str, Any]) -> dict[str, Any]:
     neighbours = mvs.select_neighbours(
         views,
         shared,
-        d["neighbours_per_view"],
+        len(views) - 1,
         d["min_pair_angle_deg"],
         d["max_pair_angle_deg"],
         centre,
@@ -123,16 +158,21 @@ def run(cfg: dict[str, Any]) -> dict[str, Any]:
     all_pts, all_rgb, all_nrm = [], [], []
     per_view = {}
     for r, ref in enumerate(views):
-        depths, pair_stats = [], {}
-        for n in neighbours[r]:
-            common = np.array(sorted(seen[r] & seen[n]), int)
-            depth, st = mvs.pair_depth(ref, views[n], sfm["points"][common], params)
-            pair_stats[views[n].name] = st
-            if "skipped" not in st:
-                depths.append(depth)
+        # Keep reserve partners: top-ranked pairs can be unrectifiable within
+        # the disparity budget even when a lower-ranked view is usable.
+        depths, pair_stats, partners = _match_reference(
+            r, views, neighbours[r], seen, sfm["points"], params, d["neighbours_per_view"]
+        )
+        info = {
+            "pairs": pair_stats,
+            "neighbours": partners,
+            "candidates_attempted": list(pair_stats),
+            "target_usable_neighbours": d["neighbours_per_view"],
+            "fused_px": 0,
+        }
         if len(depths) < params.min_agreeing_pairs:
             log.warning("%s: only %d usable stereo pairs, skipped", ref.name, len(depths))
-            per_view[ref.name] = {"pairs": pair_stats, "fused_px": 0}
+            per_view[ref.name] = info
             continue
         fused, count = mvs.fuse_reference(depths, params)
         np.savez_compressed(
@@ -146,11 +186,7 @@ def run(cfg: dict[str, Any]) -> dict[str, Any]:
         all_pts.append(pts)
         all_rgb.append(colour.reshape(-1, 3)[flat])
         all_nrm.append(normals.reshape(-1, 3)[flat])
-        per_view[ref.name] = {
-            "pairs": pair_stats,
-            "neighbours": [views[n].name for n in neighbours[r]],
-            "fused_px": int(len(pts)),
-        }
+        per_view[ref.name] = {**info, "fused_px": int(len(pts))}
         log.info("%s: %d neighbours, %d fused depth pixels", ref.name, len(depths), len(pts))
 
     points = np.vstack(all_pts)
