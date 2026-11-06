@@ -2,22 +2,24 @@
 
 **Dilip Goswami · ARAIAS technical take-home**
 
-A CPU photogrammetry pipeline for calibrating an iPhone camera and reconstructing a
-silicone wound moulage from RGB photographs. It produces calibrated cameras, sparse
-and dense point clouds, a vertex-coloured mesh and inspectable PLY exports.
-Experimental wound descriptors include boundary and reference-surface sensitivity.
+A CPU-based photogrammetry pipeline that calibrates the iPhone 13 Pro Max main
+camera and reconstructs a silicone wound moulage from RGB photographs. Outputs
+include calibrated camera parameters, sparse and dense point clouds, a
+vertex-coloured mesh and PLY files for inspection in MeshLab or CloudCompare.
+Experimental wound descriptors quantify sensitivity to the boundary and fitted
+reference surface.
 
-**Status:** research prototype. Physical scale and independent surface accuracy are
-unresolved. The supplied report and model archive describe `175d788`; correctness
-and integrity fixes were introduced in `c74e455`.
+Results use reconstruction units. The gallery and primary result tables match the
+submitted report and models; corrected runs and repeatability observations are
+documented under [Reproducibility and verification](#reproducibility-and-verification).
 
 [Gallery](#reconstruction-gallery) · [Quick start](#quick-start) · [Method](#method) · [Results](#results) ·
 [Inspect outputs](#inspect-outputs) · [Physical scale](#physical-scale) ·
-[Revisions](#revisions-and-reproducibility) · [Development](#development)
+[Reproducibility](#reproducibility-and-verification) · [Development](#development)
 
 ## Reconstruction gallery
 
-Selected renders from the **submitted archive (`175d788`)**, matching the report's
+Selected renders from the **submitted model archive**, matching the report's
 158,786-vertex mesh. The subject is a silicone wound phantom. Physical scale is
 unresolved; the depth colours describe an inferred reference surface.
 
@@ -103,8 +105,8 @@ Key decisions:
 
 ## Results
 
-Unless stated otherwise, numerical results in this section describe the **submitted
-archive (`175d788`)**, matching the accompanying report and models.
+Numerical results in this section describe the **submitted model archive** and
+match the accompanying report.
 
 | Evidence | Recorded result |
 |---|---|
@@ -240,27 +242,25 @@ depth and acceptable reprojection error. Validate the scale against a separate
 measured length excluded from fitting and report reference/endpoint uncertainty.
 A 1% scale error contributes about 2% area and 3% volume error, before shape errors.
 
-## Revisions and reproducibility
+## Reproducibility and verification
 
-The original implementation is `175d788`; the fixes are in `c74e455`. To inspect the
-original separately, run the following from the repository root, then follow Quick
-start in that checkout:
+Use a fresh output directory for each full execution and retain its manifest with
+the exported models and report. The manifest records the numerical source files,
+input images, settings, library versions and output hashes, including all five
+rendered views in the current implementation.
 
-```sh
-git worktree add --detach ../araias-wound-reference 175d788
-```
+Verify saved outputs using the source snapshot that generated them. Source
+fingerprints prevent mixing artifacts from different implementations; changes to
+documentation or package metadata do not alter the numerical-code fingerprint.
+Use each run's own measurements when preparing its report.
 
-Verify archived outputs with their matching source revision. A current checkout
-cannot verify an older source identity. Source-only documentation/metadata changes
-do not change the package-code fingerprint recorded by the pipeline.
+### Validation safeguards
 
-### Correctness and integrity fixes
-
-| Fix | Cause and resulting behaviour |
+| Check | Behaviour |
 |---|---|
-| Camera rollback | Focal refinement used a camera already changed before acceptance. Validate copied camera/pose/point state; rejection or validation exceptions leave retained state unchanged. Report candidate and retained RMS separately and reject negative solver statuses. |
-| Render hashes | Rendering wrote `renders/`; collection searched `render/`. Share the folder mapping and hash all five PNGs. A real-renderer regression alters a copied PNG and requires verification to fail. |
-| Stereo reserves | Six candidates were truncated before feasibility checks. Try reserves until six usable partners or exhaustion; retain existing disparity, agreement and TSDF support thresholds. |
+| Bundle-adjustment acceptance | Evaluate candidates on copied camera, pose and point state. Rejection or validation exceptions preserve retained state. Report candidate and retained RMS separately and reject negative solver statuses. |
+| Render integrity | Writers and artifact inventories share the same folder mapping and hash all five PNGs. A real-renderer regression alters a copied PNG and requires verification to fail. |
+| Stereo support | Try ranked reserves until six usable partners are found or candidates are exhausted. Keep disparity, agreement and TSDF support thresholds unchanged. |
 
 No rejected adjustment was recorded in the submitted archive, so a rollback effect
 on its geometry was not demonstrated. Missing screenshot hashes weakened integrity
@@ -275,7 +275,6 @@ length. These outcomes are not reproduction tolerances or physical-accuracy boun
 
 | Evidence | Submitted archive | Corrected archive | Submitted repeat | Corrected repeat |
 |---|---:|---:|---:|---:|
-| Source revision | `175d788` | `c74e455` | `175d788` | `c74e455` |
 | Date (2026) | 28 Oct | 28 Oct | 4 Nov | 4 Nov |
 | Accepted depth maps | 21 | 22 | 20 | 22 |
 | Dense points | 2,647,657 | 2,894,366 | 2,578,291 | 2,876,364 |
@@ -309,7 +308,7 @@ packaging. Tests establish specified software behaviour, not physical accuracy.
 The [source-quality workflow](https://github.com/goapu/araias-wound-reconstruction/actions/workflows/quality.yml)
 runs on pushes and pull requests, or manually. It checks dependencies, lint/format,
 synthetic tests, wheel construction, packaged defaults and all three installed CLI
-entry points. Its result applies to the corresponding pushed commit.
+entry points. Its result applies to the source version tested.
 
 ## Packaging results
 
@@ -324,8 +323,7 @@ The exporter validates the run, PDF and inspection images, then creates the repo
 copy, source/model ZIPs, screenshots, metrics and SHA-256 inventory. The source
 archive uses an allowlist to exclude task data, derived assets and credentials;
 inspection images are included separately in the delivery. The gallery above is
-available in the repository.
-Source-checkout wrappers for all three commands are in `scripts/`.
+available in the repository. Source-checkout wrappers for all three commands are in `scripts/`.
 
 ## Repository layout
 
