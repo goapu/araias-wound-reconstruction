@@ -67,9 +67,7 @@ checkout. Configuration is in `configs/default.yaml`; packaged defaults are in
 `src/woundrecon/resources/default.yaml`. Use one OpenCV distribution:
 `opencv-python-headless`.
 
-The recorded execution took **14.2 minutes of stage computation**, excluding startup
-and verification. Runtime depends on hardware and system load.
-Logs and `run_manifest.json` record stage outcomes, timings, settings, source/input
+Logs and `run_manifest.json` record stage outcomes, configuration, source/input
 hashes, library versions and artifact hashes. PDF typesetting is separate.
 
 ## Method
@@ -113,14 +111,24 @@ threads. All eight pipeline stages completed and saved-output verification passe
 | Calibration | 22/22 boards; fit RMS 0.528 px; mean held-out RMS 0.608 px |
 | Registered wound photographs | 23/23 |
 | Sparse landmarks | 12,353 raw; 3,481 exported with observations in at least three views |
-| Accepted depth maps / dense points | 22 / 2,876,364 |
-| Dense inspection cloud | 553,189 points |
+| Accepted reference depth maps | 22/23 |
+| Dense cloud after voxel aggregation | 2,876,364 points |
+| Thinned inspection cloud | 553,189 points |
 | Mesh vertices / triangles | 150,887 / 285,063 |
 | Components / non-manifold edges | 1 / 0 |
 | Open edges | 20,621 total; 0 touching the saved wound mask |
 | Normal/winding agreement, faces / area | 99.45% / 99.57% |
 | Sparse-to-mesh distance within footprint | Median 0.257% of wound length; P95 1.158% |
 | Hashed inspection renders | 5 PNGs |
+| Saved-output verification | Passed |
+| Measurement status / units | Uncertain / reconstruction units |
+
+`dense/dense.ply` contains the final **2,876,364-point cloud**. The dense
+stage records 10,293,539 samples after spatial filtering and before voxel
+aggregation; overlapping views contribute repeated surface observations. These
+samples are not the final cloud size. The 553,189-point cloud is a separate,
+thinned export for inspection. Counts are recorded in `dense/dense_stats.json` and
+`verification.json`.
 
 Sparse-to-mesh agreement is internal consistency under shared camera/image
 assumptions; it is not independent surface accuracy. Zero wound-mask open edges is
@@ -192,7 +200,8 @@ from version control.
 | `scale/sparse_aligned.ply` | Exported sparse landmarks in the same frame |
 | `scale/cameras_aligned.ply` | Registered camera frusta in the same frame |
 | `measure/wound_depth.ply` | Same mesh with experimental depth colours |
-| `dense/dense.ply` | Full dense cloud in the original SfM frame |
+| `dense/dense.ply` | Final dense cloud in the original SfM frame |
+| `dense/dense_stats.json` | Accepted depth maps and pre-/post-aggregation point counts |
 | `renders/*.png` | Colour, neutral geometry, depth and camera views |
 | `calibration/calibration.json` | Intrinsics, distortion, fit errors and bootstrap uncertainty |
 | `calibration/bootstrap_samples.npz` | Recorded parameter draws and spatial displacements |
@@ -252,7 +261,8 @@ A 1% scale error contributes about 2% area and 3% volume error, before shape err
 Use a fresh output directory for each full execution and retain its manifest with
 the exported models and report. The manifest records the numerical source files,
 input images, settings, library versions and output hashes, including all five
-rendered views in the current implementation.
+rendered views. For the recorded execution, the inventory covers
+30 package source files, 45 input images and 103 output artifacts.
 
 Verify saved outputs using the source snapshot that generated them. Source
 fingerprints prevent mixing artifacts from different implementations; changes to
@@ -340,7 +350,7 @@ geometry and measurement. `provenance.py` and `reuse.py` bind dependencies;
 |---|---|---|
 | Unverified scene scale | Length, area and volume remain in reconstruction units | Measure a rigid in-scene reference and validate on a separate length |
 | Peripheral calibration uncertainty | Distortion extrapolation is unstable near sensor corners | Use a rigid target with varied tilt, distance and edge/corner coverage at the intended focus |
-| Limited stereo feasibility | One registered photograph has no accepted depth map because every attempted partner exceeded the disparity-search budget | Investigate pose/orientation and acquisition geometry; assess wider search against memory/runtime cost |
+| Limited stereo feasibility | One registered photograph has no accepted depth map because every attempted partner exceeded the disparity-search budget | Investigate pose/orientation and acquisition geometry; assess wider search against memory and computation cost |
 | Incomplete observation support | Outer boundaries remain open and irregular | Improve viewpoint coverage and evaluate completeness against reference geometry |
 | Heuristic boundary and inferred intact surface | Depth/volume depend on the definition; measurement status remains uncertain | Obtain expert-reviewed boundaries and measured phantom geometry |
 | One phantom and capture setting | Generalisation to clinical scenes is untested | Evaluate diverse authorised captures across sessions, operators and devices |
