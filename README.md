@@ -1,48 +1,29 @@
 # Camera calibration and 3D wound reconstruction
 
-**Dilip Goswami**
+**Dilip Goswami** · [![Source quality](https://github.com/goapu/araias-wound-reconstruction/actions/workflows/quality.yml/badge.svg?branch=main)](https://github.com/goapu/araias-wound-reconstruction/actions/workflows/quality.yml)
 
-A CPU-based photogrammetry pipeline that calibrates the iPhone 13 Pro Max main
-camera and reconstructs a silicone wound moulage from RGB photographs. Outputs
-include calibrated camera parameters, sparse and dense point clouds, a
-vertex-coloured mesh and PLY files for inspection in MeshLab or CloudCompare.
-Experimental wound descriptors quantify sensitivity to the boundary and fitted
-reference surface.
+A CPU pipeline for iPhone 13 Pro Max camera calibration and silicone wound reconstruction from RGB photographs.
+It exports calibrated cameras, sparse/dense point clouds, a vertex-coloured mesh and PLY files. Experimental
+wound descriptors include definition sensitivity; the gallery and metrics describe the same complete execution.
 
-Results are expressed in reconstruction units. The metrics and gallery below come
-from one complete execution of the current implementation on 4 November 2026.
-Physical scale, measurement assumptions and validation limits are documented below.
-
-[Gallery](#reconstruction-gallery) · [Quick start](#quick-start) · [Method](#method) · [Results](#results) ·
-[Inspect outputs](#inspect-outputs) · [Physical scale](#physical-scale) ·
-[Reproducibility](#reproducibility-and-verification) · [Development](#development)
+[Gallery](#reconstruction-gallery) · [Quick start](#quick-start) · [Method](#method) ·
+[Results](#results) · [Outputs](#inspect-outputs) · [Scale](#physical-scale) · [Reproducibility](#reproducibility-and-verification)
 
 ## Reconstruction gallery
 
-Colour, geometry and depth views of the **150,887-vertex reconstructed mesh**.
-The subject is a silicone wound phantom. Depth colours represent displacement below
-a fitted reference surface in reconstruction units.
+Colour, geometry and depth views of the **150,887-vertex mesh** of a silicone wound phantom.
 
-<p align="center">
-  <img src="assets/previews/05_textured_oblique.png" width="780" alt="Vertex-coloured reconstructed silicone wound mesh, oblique view; scale unknown">
-</p>
+<img src="assets/previews/05_textured_oblique.png" width="780" alt="Vertex-coloured reconstructed wound mesh, oblique view">
 
 | Surface geometry | Experimental depth |
 |---|---|
-| ![Neutral oblique rendering of the reconstructed mesh](assets/previews/02_geometry_oblique.png) | ![Experimental wound depth relative to the fitted intact-surface reference](assets/previews/03_wound_depth.png) |
-| Neutral shading exposes relief and open outer boundaries. | Purple is zero; yellow is P99, about 3.0% of wound length. |
-
-Open an image for full resolution. The preview files are unchanged pipeline outputs;
-[PLY files and inspection instructions](#inspect-outputs) are described below.
+| ![Neutral oblique rendering](assets/previews/02_geometry_oblique.png) | ![Depth relative to the fitted reference](assets/previews/03_wound_depth.png) |
+| Neutral shading shows relief and open boundaries. | Purple: zero; yellow: P99, about 3.0% of wound length. |
 
 ## Quick start
 
-Use **Python 3.13** for the pinned environment. The recorded execution used Python 3.13.5
-on macOS arm64 with four OpenCV threads. The package declares Python 3.12+ support;
-the supplied lock file was resolved for Python 3.13. No GPU, model training,
-pretrained weights or remote image service is required.
-
-Keep the supplied data outside the repository:
+Use **Python 3.13** (recorded: 3.13.5, macOS arm64, four OpenCV threads). Package metadata declares Python
+3.12+. No GPU or training is required. Keep data outside Git and run commands from the repository root.
 
 ```text
 workspace/
@@ -51,124 +32,78 @@ workspace/
 └── araias-wound-reconstruction/    # source repository
 ```
 
-From the repository root:
-
 ```sh
 python3.13 -m venv .venv
 .venv/bin/python -m pip install -r requirements.lock.txt
 .venv/bin/python -m pip install --no-deps -e '.[dev]'
-
 .venv/bin/wound-reconstruct --data-root .. --output-dir outputs --threads 4
 .venv/bin/wound-verify --output-dir outputs --data-root ..
 ```
 
-Use a fresh output directory per full run and a separate virtual environment per
-checkout. Configuration is in `configs/default.yaml`; packaged defaults are in
-`src/woundrecon/resources/default.yaml`. Use one OpenCV distribution:
-`opencv-python-headless`.
-
-Logs and `run_manifest.json` record stage outcomes, configuration, source/input
-hashes, library versions and artifact hashes. PDF typesetting is separate.
+Use a fresh output directory and one environment per checkout. Settings in `configs/default.yaml` match packaged
+defaults in `src/woundrecon/resources/default.yaml`; use `opencv-python-headless` only.
 
 ## Method
 
-```text
-audit → calibrate → sfm → dense → mesh → scale → measure → render
-```
-
-| Stage | Responsibility |
+| Stage | Approach |
 |---|---|
-| `audit` | Check resolution, orientation, colour profile, exposure, sharpness and highlights |
-| `calibrate` | Detect corners; compare five lens models on held-out views; bootstrap uncertainty |
-| `sfm` | RootSIFT matching, verified tracks, incremental camera registration and robust bundle adjustment |
-| `dense` | Rectified SGBM stereo; try ranked reserves until six usable partners or candidate exhaustion; fuse depths agreeing across two pairs |
-| `mesh` | TSDF fusion and marching cubes; require all eight cell corners to have support from at least two depth maps |
-| `scale` | Validate a supplied scale reference and align geometry to the inspection frame |
-| `measure` | Estimate heuristic wound labels; fit a periwound reference; integrate descriptors and test definition sensitivity |
-| `render` | Produce photographic-colour, neutral-geometry, depth and camera views |
+| `audit` | Resolution, orientation, colour profile, exposure, sharpness and highlights |
+| `calibrate` | Checkerboard corners, five lens models, held-out scoring and bootstrap uncertainty |
+| `sfm` | RootSIFT, geometric match verification, tracks, incremental poses and robust bundle adjustment |
+| `dense` | Rectified SGBM; ranked reserves until six usable partners or exhaustion; depth agreement across two pairs |
+| `mesh` | TSDF and marching cubes; all eight cell corners require support from at least two depth maps |
+| `scale` | Validate a physical reference and align the inspection frame |
+| `measure` | Heuristic boundary, cross-validated periwound reference and descriptor sensitivity |
+| `render` | Colour, neutral geometry, depth and camera views |
 
-Key decisions:
-
-- **Coordinates and colour:** map images to the native sensor frame; use half-resolution
-  features/stereo and report reprojection errors in native pixels. Average colours
-  in linear light.
-- **Observation support:** retain missing regions rather than fabricate surfaces.
-  Release fails when an open edge touches the saved heuristic wound mask. Pair
-  estimates share images/cameras and are correlated.
-- **Geometry checks:** require finite/unit normals and at least 95% agreement with
-  triangle winding by both face count and area. XYZ uses float64, normals float32
-  and RGB uint8.
-- **Traceability:** bind caches to inputs, settings, code and libraries. Partial reruns
-  require unchanged upstream dependencies and label reused stages in the manifest.
+Features/stereo use half resolution; reprojection errors use native pixels. Colours are averaged in linear
+light. Missing support stays open; release requires finite/unit normals, at least 95% winding agreement by face
+count/area and no open edges touching the saved wound mask. XYZ is float64, normals float32 and RGB uint8.
 
 ## Results
 
-Recorded execution: **4 November 2026**, Python 3.13.5, macOS arm64, four OpenCV
-threads. All eight pipeline stages completed and saved-output verification passed.
+All eight stages completed and saved-output verification passed.
 
 | Evidence | Recorded result |
 |---|---|
 | Calibration | 22/22 boards; fit RMS 0.528 px; mean held-out RMS 0.608 px |
-| Registered wound photographs | 23/23 |
-| Sparse landmarks | 12,353 raw; 3,481 exported with observations in at least three views |
+| Registered photographs | 23/23 |
 | Accepted reference depth maps | 22/23 |
-| Dense cloud after voxel aggregation | 2,876,364 points |
-| Thinned inspection cloud | 553,189 points |
+| Sparse landmarks | 12,353 raw; 3,481 exported with observations in at least three views |
+| Dense cloud / thinned inspection cloud | 2,876,364 / 553,189 points |
 | Mesh vertices / triangles | 150,887 / 285,063 |
 | Components / non-manifold edges | 1 / 0 |
 | Open edges | 20,621 total; 0 touching the saved wound mask |
 | Normal/winding agreement, faces / area | 99.45% / 99.57% |
 | Sparse-to-mesh distance within footprint | Median 0.257% of wound length; P95 1.158% |
 | Hashed inspection renders | 5 PNGs |
-| Saved-output verification | Passed |
-| Measurement status / units | Uncertain / reconstruction units |
 
-`dense/dense.ply` contains the final **2,876,364-point cloud**. The dense
-stage records 10,293,539 samples after spatial filtering and before voxel
-aggregation; overlapping views contribute repeated surface observations. These
-samples are not the final cloud size. The 553,189-point cloud is a separate,
-thinned export for inspection. Counts are recorded in `dense/dense_stats.json` and
-`verification.json`.
+Dense counts are after voxel aggregation; `dense_stats.json` records 10,293,539 samples before aggregation,
+including overlapping surface observations.
 
-Sparse-to-mesh agreement is internal consistency under shared camera/image
-assumptions; it is not independent surface accuracy. Zero wound-mask open edges is
-a coverage check under a heuristic mask, not a clinical boundary validation.
+**Scope.** Geometry uses reconstruction units; metric scale requires a verified reference. Sparse-to-mesh
+agreement and mask coverage are internal checks. Boundary and reference lack independent validation;
+descriptors remain uncertain. Software verification does not establish clinical accuracy.
 
-### Calibration and uncertainty
-
-Intrinsics use the native **4032 × 3024** landscape sensor frame:
+### Calibration (4032 × 3024 native pixels)
 
 ```text
 K = [[3081.934,    0.000, 1982.549],
      [   0.000, 3074.910, 1510.107],
      [   0.000,    0.000,    1.000]]
-
-distortion [k1, k2, p1, p2, k3] = [0.236163, -1.315694, 0, 0, 2.369599]
+distortion [k1,k2,p1,p2,k3] = [0.236163,-1.315694,0,0,2.369599]
 ```
 
-The selected model uses three radial terms with tangential terms fixed at zero.
-Model selection chooses the simplest fit within 2% of the lowest held-out error:
-the five-coefficient model scored 0.599 px versus 0.608 px for the radial model.
-Shared target geometry is refined by release-object calibration; improved prediction
-does not establish the physical cause of the improvement.
-
-Camera/target fits exclude each held-out view. Pose uses even-index corners and
-scoring uses odd-index corners; the score averages per-view RMS values. Rational
-fits are controls; reconstruction rejects unsupported distortion vectors rather
-than silently dropping coefficients.
+Three radial terms are selected within 2% of the best held-out RMS (0.608 versus 0.599 px); shared target
+geometry is refined. Held-out views are excluded from fitting; even corners estimate pose, odd corners score it.
+Fixed intrinsics are retained because the paired wound-camera improvement interval includes zero.
 
 | Bootstrap SD | fx | fy | cx | cy | k1 | k2 | k3 |
 |---|---|---|---|---|---|---|---|
 | Value | 15.7 px | 19.0 px | 17.3 px | 3.3 px | 0.013 | 0.120 | 0.327 |
 
-Boards occupy **45.3%** of a diagnostic sensor grid. Conditional bootstrap
-pixel-displacement SD is 0.145 px centrally and 76.9 px at a sensor corner: precision
-under the model, not measured physical error. Feature extraction limits extrapolation
-to 1.25 times the observed corner radius.
-
-Fixed checkerboard intrinsics were retained for reconstruction: the paired held-out
-difference interval included zero. Camera controls are rebuilt on training images
-and compared on common held-out associations with disjoint pose/scoring partitions.
+Diagnostic grid coverage is 45.3%. Conditional bootstrap pixel-displacement SD is 0.145 px centrally and 76.9 px
+at a corner; feature extraction is limited to 1.25 times the observed checkerboard corner radius.
 
 ### Experimental wound descriptors
 
@@ -178,66 +113,49 @@ For nominal wound length **L = 3.730 reconstruction units**:
 |---|---|---|
 | Width | 0.517 L | 0.497–0.517 L |
 | Projected area | 0.373 L² | 0.336–0.394 L² |
+| Surface area | 0.394987 L² | 0.354472–0.417815 L² |
 | Depth P99 | 0.02996 L | 0.02868–0.05012 L |
-| Volume below fitted reference | 0.005905 L³ | 0.004734–0.011916 L³ |
+| Signed mean depth | 0.015723 L | 0.013984–0.030097 L |
+| Volume below reference | 0.005905 L³ | 0.004734–0.011916 L³ |
 
-Each variant uses its own wound length. These one-at-a-time ranges are not confidence
-intervals. Depth is measured along canonical z; P99 is the projected-area-weighted
-percentile of clipped triangle mean depths. The intact reference surface is inferred,
-and the boundary is unreviewed. These are not validated clinical measurements.
+Reference order **4** was selected by leave-one-sector-out cross-validation over eight sectors. The planar
+reference was rejected because it placed the wound above the reference. Depth follows canonical z; P99 weights
+clipped triangle means by projected area, and signed mean depth counts above-reference regions negatively. Each
+variant uses its own L; **sensitivity ranges are not confidence intervals**.
 
 ## Inspect outputs
 
-Paths below are relative to the selected output directory. Full geometry is
-produced by the pipeline; the repository includes three rendered previews in
-`assets/previews/`. Input photographs and full reconstruction files are excluded
-from version control.
+Artifact paths are relative to the output directory.
 
-| Artifact | Purpose |
+| Artifact | Contents |
 |---|---|
-| `scale/mesh_aligned.ply` | Vertex-coloured mesh; x along the forearm, z towards the cameras |
-| `scale/dense_aligned_thinned.ply` | Dense inspection cloud in the same frame |
-| `scale/sparse_aligned.ply` | Exported sparse landmarks in the same frame |
-| `scale/cameras_aligned.ply` | Registered camera frusta in the same frame |
+| `scale/mesh_aligned.ply` | Coloured mesh; x along forearm, z towards cameras |
+| `scale/dense_aligned_thinned.ply` | Thinned dense inspection cloud |
+| `scale/sparse_aligned.ply` | Exported sparse landmarks |
+| `scale/cameras_aligned.ply` | Registered camera frusta |
 | `measure/wound_depth.ply` | Same mesh with experimental depth colours |
-| `dense/dense.ply` | Final dense cloud in the original SfM frame |
-| `dense/dense_stats.json` | Accepted depth maps and pre-/post-aggregation point counts |
-| `renders/*.png` | Colour, neutral geometry, depth and camera views |
-| `calibration/calibration.json` | Intrinsics, distortion, fit errors and bootstrap uncertainty |
-| `calibration/bootstrap_samples.npz` | Recorded parameter draws and spatial displacements |
-| `measure/measurements.json` | Descriptor definitions, sensitivity and status |
-| `verification.json`, `run_manifest.json` | Release checks and run lineage |
+| `dense/dense.ply`, `dense/dense_stats.json` | Final dense cloud and pre-/post-aggregation counts |
+| `calibration/calibration.json`, `calibration/bootstrap_samples.npz` | Intrinsics, errors, parameter draws and displacements |
+| `measure/measurements.json` | Descriptors, sensitivity and status |
+| `verification.json`, `run_manifest.json` | Release checks, settings and hashes |
 
-Import the aligned PLYs together in MeshLab or CloudCompare. To inspect relief,
-disable vertex colours on `mesh_aligned.ply` and use directional lighting. The full
-dense cloud requires the transform in `scale/scale.json` before overlaying; read
-units from that JSON and the PLY headers.
-
-Start with `01_textured_top.png`, `02_geometry_oblique.png` and
-`05_textured_oblique.png` in `renders/`. Photographic texture alone can conceal
-geometry defects.
+Aligned PLYs overlay directly in MeshLab/CloudCompare; apply `scale/scale.json` to the full dense cloud before
+overlaying it. Inspect with vertex colours disabled and directional lighting. Preview files are
+`05_textured_oblique.png`, `02_geometry_oblique.png` and `03_wound_depth.png`, also generated under `renders/`.
 
 ## Physical scale
 
-Scaling the scene and camera positions together preserves monocular projections.
-A verified physical length is therefore required for metric scale. No reference
-with a confirmed size was established in the wound photographs. The calibration
-board is absent from those views and its square size was unspecified.
+Monocular scale requires a verified length. The board is absent from wound views and its square size is
+unspecified. Searching eight coded-marker dictionaries found no marker but cannot exclude an uncoded reference.
+Set one scale source and rerun the pipeline into a fresh output directory:
 
-A search over eight ArUco/AprilTag dictionaries found no coded marker; this does not
-exclude an uncoded reference. A verified manufacturer dimension or measurement
-between identifiable, rigid features of the moulage can provide a scale source.
-
-Set one source in `configs/default.yaml`, then run the full pipeline into a new
-output directory:
-
-| Setting | Required reference |
+| Configuration | Required reference |
 |---|---|
-| `scale.marker_side_mm` | Measured ArUco/AprilTag marker visible in the photographs |
-| `scale.reference_annotation` | Measured rigid segment with endpoints marked in at least two photographs |
+| `scale.marker_side_mm` | Measured coded marker visible in the photographs |
+| `scale.reference_annotation` | Measured rigid segment marked in at least two photographs |
 | `scale.known_length_mm` + `scale.reference_points` | Measured separation of two points in `dense/dense.ply` |
 
-Annotation example, using original displayed-image pixels; values are illustrative:
+Example annotation uses original displayed-image pixels; values are illustrative:
 
 ```json
 {
@@ -250,47 +168,34 @@ Annotation example, using original displayed-image pixels; values are illustrati
 }
 ```
 
-Annotation paths are relative to the data root. References must be finite, positive
-and non-degenerate. Image-based references also require parallax, positive camera
-depth and acceptable reprojection error. Validate the scale against a separate
-measured length excluded from fitting and report reference/endpoint uncertainty.
-A 1% scale error contributes about 2% area and 3% volume error, before shape errors.
+Paths are relative to the data root. Require positive finite lengths and separated endpoints; image annotations
+also need parallax, positive depth and low reprojection error. Verify on a separate measured length. Scale error
+propagates approximately 1:2:3 into length, area and volume error.
 
 ## Reproducibility and verification
 
-Use a fresh output directory for each full execution and retain its manifest with
-the exported models and report. The manifest records the numerical source files,
-input images, settings, library versions and output hashes, including all five
-rendered views. For the recorded execution, the inventory covers
-30 package source files, 45 input images and 103 output artifacts.
+The manifest binds 30 package sources, 45 input images and 103 output artifacts to their settings/environment.
+Caches and partial reruns check upstream dependencies.
 
-Verify saved outputs using the source snapshot that generated them. Source
-fingerprints prevent mixing artifacts from different implementations; changes to
-documentation or package metadata do not alter the numerical-code fingerprint.
-Use each run's own measurements when preparing its report.
-
-### Validation safeguards
-
-| Check | Behaviour |
+| Safeguard | Rule |
 |---|---|
-| Bundle-adjustment acceptance | Evaluate candidates on copied camera, pose and point state. Rejection or validation exceptions preserve retained state. Report candidate and retained RMS separately and reject negative solver statuses. |
-| Render integrity | Writers and artifact inventories share the same folder mapping and hash all five PNGs. A real-renderer regression alters a copied PNG and requires verification to fail. |
-| Stereo support | Try ranked reserves until six usable partners are found or candidates are exhausted. Apply the configured disparity, agreement and TSDF support thresholds. |
+| Bundle adjustment | Validate copied candidate state; rejection leaves retained parameters unchanged |
+| Render integrity | Hash all five PNGs; a modified screenshot fails verification |
+| Stereo support | Use ranked reserves while retaining disparity, agreement and TSDF support limits |
 
 ### Repeating the experiment
 
-Use the pinned environment, input image bytes, configuration and thread count.
-Randomised steps are seeded, but native numerical execution and threshold decisions
-can still change the camera solution, accepted support and output counts. Compare
-coverage, topology and descriptor definitions alongside numerical values; the
-recorded metrics are individual run results, not predefined acceptance tolerances.
+Two executions used matching code, input hashes, settings, libraries and threads. Fixed seeds still permit
+native numerical variation; these observed ranges do not characterise capture repeatability.
 
-Verification establishes saved-file integrity and configured software/geometry
-checks. Independent reference geometry is needed to measure physical accuracy.
+| Metric | Observed minimum–maximum |
+|---|---|
+| Dense points | 2,876,364–2,894,366 |
+| Mesh vertices | 150,887–155,647 |
+| Depth P99 / L | 0.02996–0.03008 |
+| Volume / L³ | 0.005905–0.005936 |
 
 ## Development
-
-Run the synthetic suite and static checks without task images:
 
 ```sh
 .venv/bin/python -m pytest -q
@@ -299,75 +204,47 @@ Run the synthetic suite and static checks without task images:
 .venv/bin/python -m pip check
 ```
 
-The current suite has **73 tests** covering calibration, projection, stereo,
-bundle-adjustment failure paths, TSDF support/normals, integration, scale, PLY
-precision, cache invalidation, release rejection, rendering/tamper detection and
-packaging. Tests establish specified software behaviour, not physical accuracy.
+The **73 synthetic tests** cover geometry, calibration, stereo, failure paths, provenance, rendering and
+packaging. CI adds wheel/defaults/installed-CLI checks on pushes, pull requests and manual dispatch.
 
-The [source-quality workflow](https://github.com/goapu/araias-wound-reconstruction/actions/workflows/quality.yml)
-runs on pushes and pull requests, or manually. It checks dependencies, lint/format,
-synthetic tests, wheel construction, packaged defaults and all three installed CLI
-entry points. Its result applies to the source version tested.
-
-## Packaging results
-
-Package a verified run with an existing PDF describing that same run:
+## Export
 
 ```sh
-.venv/bin/wound-export --output-dir outputs \
-  --report /path/to/report.pdf --dest submission
+.venv/bin/wound-export --output-dir outputs --report /path/to/report.pdf --dest submission
 ```
 
-The exporter validates the run, PDF and inspection images, then creates the report
-copy, source/model ZIPs, screenshots, metrics and SHA-256 inventory. The source
-archive uses an allowlist to exclude task data, derived assets and credentials;
-inspection images are included separately in the delivery. The gallery above is
-available in the repository. Source-checkout wrappers for all three commands are in `scripts/`.
+Exports a verified run with the matching PDF, source/model ZIPs, screenshots, metrics and SHA-256 inventory.
 
 ## Repository layout
 
 ```text
-.github/workflows/quality.yml  automated source and package checks
-assets/previews/              three recorded-run inspection renders
-configs/default.yaml          pipeline settings
-src/woundrecon/                numerical modules, CLI and stage orchestration
-  stages/                     audit, calibrate, sfm, dense, mesh, scale, measure, render
-  resources/default.yaml      installed-package defaults
-tests/                        synthetic unit, regression and integration checks
-scripts/                      source-checkout command wrappers
-pyproject.toml                package metadata, dependencies and lint settings
-requirements.lock.txt         pinned development environment
-.editorconfig, .gitattributes text formatting and line-ending rules
+.github/workflows/quality.yml  source and package checks
+assets/previews/              three reconstruction renders
+configs/default.yaml          pipeline configuration
+src/woundrecon/                numerical modules, CLI, stages/ and packaged resources/
+tests/                        synthetic tests
+scripts/                      command wrappers
+pyproject.toml, requirements.lock.txt  packaging, lint settings and pinned dependencies
+.editorconfig, .gitattributes formatting and line endings
 ```
 
-Each stage module orchestrates work; numerical modules implement calibration,
-geometry and measurement. `provenance.py` and `reuse.py` bind dependencies;
-`validation.py` checks saved outputs; `delivery.py` assembles verified exports.
+Stages orchestrate numerical modules; provenance tracks dependencies, validation checks files and delivery
+exports.
 
 ## Limitations and next steps
 
-| Limitation | Observed consequence | Next step |
-|---|---|---|
-| Unverified scene scale | Length, area and volume remain in reconstruction units | Measure a rigid in-scene reference and validate on a separate length |
-| Peripheral calibration uncertainty | Distortion extrapolation is unstable near sensor corners | Use a rigid target with varied tilt, distance and edge/corner coverage at the intended focus |
-| Limited stereo feasibility | One registered photograph has no accepted depth map because every attempted partner exceeded the disparity-search budget | Investigate pose/orientation and acquisition geometry; assess wider search against memory and computation cost |
-| Incomplete observation support | Outer boundaries remain open and irregular | Improve viewpoint coverage and evaluate completeness against reference geometry |
-| Heuristic boundary and inferred intact surface | Depth/volume depend on the definition; measurement status remains uncertain | Obtain expert-reviewed boundaries and measured phantom geometry |
-| One phantom and capture setting | Generalisation to clinical scenes is untested | Evaluate diverse authorised captures across sessions, operators and devices |
+| Limitation | Consequence and next step |
+|---|---|
+| Unknown physical scale | Supply a measured rigid reference and verify on a separate length |
+| Peripheral calibration uncertainty | Recapture with a rigid target, varied tilt/distance and edge/corner coverage |
+| `IMG_2976.png` has no depth map | All 18 candidates exceeded the 384-pixel disparity budget; inspect pose/orientation and acquisition geometry |
+| Open outer boundaries | Improve viewpoint coverage and measure completeness against reference geometry |
+| Heuristic boundary and fitted intact surface | Obtain expert labels and known phantom geometry before relying on depth/volume |
+| One phantom; unlocked focus/exposure, glare and possible motion | Test repeated captures across sessions, operators and devices with agreed acceptance criteria |
 
-Unlocked focus/exposure, specular regions and possible motion can also affect
-correspondence and shape. Point count and smooth appearance do not establish
-accuracy. Define error/completeness tolerances before benchmarking, and request
-recapture when observation support is inadequate.
-
-## Methods and tools
+## References
 
 [Zhang calibration](https://doi.org/10.1109/34.888718) ·
 [Imperfect-target calibration](https://doi.org/10.1109/ICCVW.2011.6130369) ·
-[SIFT](https://www.cs.ubc.ca/~lowe/papers/ijcv04.pdf) ·
-[RootSIFT](https://www.robots.ox.ac.uk/~vgg/publications/2012/Arandjelovic12/arandjelovic12.pdf) ·
-[Bundle adjustment](https://doi.org/10.1007/3-540-44480-7_21) ·
-[Semi-global matching](https://doi.org/10.1109/TPAMI.2007.1166) ·
-[TSDF fusion](https://graphics.stanford.edu/papers/volrange/)
-
-Built with OpenCV, NumPy, SciPy, scikit-image, Pillow, Matplotlib, PyYAML and pypdf.
+[SIFT](https://www.cs.ubc.ca/~lowe/papers/ijcv04.pdf) · [RootSIFT](https://www.robots.ox.ac.uk/~vgg/publications/2012/Arandjelovic12/arandjelovic12.pdf) ·
+[Bundle adjustment](https://doi.org/10.1007/3-540-44480-7_21) · [SGBM](https://doi.org/10.1109/TPAMI.2007.1166) · [TSDF](https://graphics.stanford.edu/papers/volrange/)
