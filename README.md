@@ -50,7 +50,7 @@ defaults in `src/woundrecon/resources/default.yaml`; use `opencv-python-headless
 | `audit` | Resolution, orientation, colour profile, exposure, sharpness and highlights |
 | `calibrate` | Checkerboard corners, five lens models, held-out scoring and bootstrap uncertainty |
 | `sfm` | RootSIFT, geometric match verification, tracks, incremental poses and robust bundle adjustment |
-| `dense` | Rectified SGBM; ranked reserves until six usable partners or exhaustion; depth agreement across two pairs |
+| `dense` | Rectified SGBM with left–right consistency; ranked reserve partners; depth agreement across two pairs |
 | `mesh` | TSDF and marching cubes; all eight cell corners require support from at least two depth maps |
 | `scale` | Validate a physical reference and align the inspection frame |
 | `measure` | Heuristic boundary, cross-validated periwound reference and descriptor sensitivity |
@@ -68,7 +68,7 @@ All eight stages completed and saved-output verification passed.
 |---|---|
 | Calibration | 22/22 boards; fit RMS 0.528 px; mean held-out RMS 0.608 px |
 | Registered photographs | 23/23 |
-| Accepted reference depth maps | 22/23 |
+| Depth maps accepted (of 23 views) | 22 |
 | Sparse landmarks | 12,353 raw; 3,481 exported with observations in at least three views |
 | Dense cloud / thinned inspection cloud | 2,876,364 / 553,189 points |
 | Mesh vertices / triangles | 150,887 / 285,063 |
@@ -107,21 +107,21 @@ at a corner; feature extraction is limited to 1.25 times the observed checkerboa
 
 ### Experimental wound descriptors
 
-For nominal wound length **L = 3.730 reconstruction units**:
+For nominal wound length **L = 3.73 reconstruction units**; descriptors rounded to three significant figures:
 
 | Descriptor | Nominal | Definition sensitivity |
 |---|---|---|
 | Width | 0.517 L | 0.497–0.517 L |
 | Projected area | 0.373 L² | 0.336–0.394 L² |
-| Surface area | 0.394987 L² | 0.354472–0.417815 L² |
-| Depth P99 | 0.02996 L | 0.02868–0.05012 L |
-| Signed mean depth | 0.015723 L | 0.013984–0.030097 L |
-| Volume below reference | 0.005905 L³ | 0.004734–0.011916 L³ |
+| Surface area | 0.395 L² | 0.354–0.418 L² |
+| Depth P99 | 0.0300 L | 0.0287–0.0501 L |
+| Signed mean depth | 0.0157 L | 0.0140–0.0301 L |
+| Volume below reference | 0.00591 L³ | 0.00473–0.0119 L³ |
 
 Reference order **4** was selected by leave-one-sector-out cross-validation over eight sectors. The planar
-reference was rejected because it placed the wound above the reference. Depth follows canonical z; P99 weights
-clipped triangle means by projected area, and signed mean depth counts above-reference regions negatively. Each
-variant uses its own L; **sensitivity ranges are not confidence intervals**.
+reference was rejected because it placed the wound above the reference. Depth follows canonical z. P99 is the
+99th percentile of clipped triangle mean depths, weighted by projected area; signed mean depth counts
+above-reference regions negatively. Each variant uses its own L; **sensitivity ranges are not confidence intervals**.
 
 ## Inspect outputs
 
@@ -185,8 +185,9 @@ Caches and partial reruns check upstream dependencies.
 
 ### Repeating the experiment
 
-Two executions used matching code, input hashes, settings, libraries and threads. Fixed seeds still permit
-native numerical variation; these observed ranges do not characterise capture repeatability.
+Two executions used matching code, input hashes, numerical settings, libraries and thread counts; only the
+output-directory paths differed. Fixed seeds still permit native numerical variation. These observed ranges
+do not characterise capture repeatability.
 
 | Metric | Observed minimum–maximum |
 |---|---|
@@ -226,6 +227,7 @@ tests/                        synthetic tests
 scripts/                      command wrappers
 pyproject.toml, requirements.lock.txt  packaging, lint settings and pinned dependencies
 .editorconfig, .gitattributes formatting and line endings
+.gitignore                    data, output and local-file exclusions
 ```
 
 Stages orchestrate numerical modules; provenance tracks dependencies, validation checks files and delivery
@@ -237,7 +239,7 @@ exports.
 |---|---|
 | Unknown physical scale | Supply a measured rigid reference and verify on a separate length |
 | Peripheral calibration uncertainty | Recapture with a rigid target, varied tilt/distance and edge/corner coverage |
-| `IMG_2976.png` has no depth map | All 18 candidates exceeded the 384-pixel disparity budget; inspect pose/orientation and acquisition geometry |
+| `IMG_2976.png` has no depth map | All 18 candidates required a disparity search wider than 384 pixels at half resolution; inspect pose/orientation and acquisition geometry |
 | Open outer boundaries | Improve viewpoint coverage and measure completeness against reference geometry |
 | Heuristic boundary and fitted intact surface | Obtain expert labels and known phantom geometry before relying on depth/volume |
 | One phantom; unlocked focus/exposure, glare and possible motion | Test repeated captures across sessions, operators and devices with agreed acceptance criteria |
