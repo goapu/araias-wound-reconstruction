@@ -1,6 +1,6 @@
 # Camera calibration and 3D wound reconstruction
 
-**Dilip Goswami · ARAIAS technical take-home**
+**Dilip Goswami**
 
 A CPU-based photogrammetry pipeline that calibrates the iPhone 13 Pro Max main
 camera and reconstructs a silicone wound moulage from RGB photographs. Outputs
@@ -9,9 +9,9 @@ vertex-coloured mesh and PLY files for inspection in MeshLab or CloudCompare.
 Experimental wound descriptors quantify sensitivity to the boundary and fitted
 reference surface.
 
-Results use reconstruction units. The gallery and primary result tables match the
-submitted report and models; corrected runs and repeatability observations are
-documented under [Reproducibility and verification](#reproducibility-and-verification).
+Results are expressed in reconstruction units. The metrics and gallery below come
+from one complete execution of the current implementation on 4 November 2026.
+Physical scale, measurement assumptions and validation limits are documented below.
 
 [Gallery](#reconstruction-gallery) · [Quick start](#quick-start) · [Method](#method) · [Results](#results) ·
 [Inspect outputs](#inspect-outputs) · [Physical scale](#physical-scale) ·
@@ -19,9 +19,9 @@ documented under [Reproducibility and verification](#reproducibility-and-verific
 
 ## Reconstruction gallery
 
-Selected renders from the **submitted model archive**, matching the report's
-158,786-vertex mesh. The subject is a silicone wound phantom. Physical scale is
-unresolved; the depth colours describe an inferred reference surface.
+Colour, geometry and depth views of the **150,887-vertex reconstructed mesh**.
+The subject is a silicone wound phantom. Depth colours represent displacement below
+a fitted reference surface in reconstruction units.
 
 <p align="center">
   <img src="assets/previews/05_textured_oblique.png" width="780" alt="Vertex-coloured reconstructed silicone wound mesh, oblique view; scale unknown">
@@ -30,14 +30,14 @@ unresolved; the depth colours describe an inferred reference surface.
 | Surface geometry | Experimental depth |
 |---|---|
 | ![Neutral oblique rendering of the reconstructed mesh](assets/previews/02_geometry_oblique.png) | ![Experimental wound depth relative to the fitted intact-surface reference](assets/previews/03_wound_depth.png) |
-| Neutral shading exposes relief and open outer boundaries. | Purple is zero; yellow is P99, about 3.27% of wound length. |
+| Neutral shading exposes relief and open outer boundaries. | Purple is zero; yellow is P99, about 3.0% of wound length. |
 
 Open an image for full resolution. The preview files are unchanged pipeline outputs;
 [PLY files and inspection instructions](#inspect-outputs) are described below.
 
 ## Quick start
 
-Use **Python 3.13** for the pinned environment. The reference run used Python 3.13.5
+Use **Python 3.13** for the pinned environment. The recorded execution used Python 3.13.5
 on macOS arm64 with four OpenCV threads. The package declares Python 3.12+ support;
 the supplied lock file was resolved for Python 3.13. No GPU, model training,
 pretrained weights or remote image service is required.
@@ -67,8 +67,8 @@ checkout. Configuration is in `configs/default.yaml`; packaged defaults are in
 `src/woundrecon/resources/default.yaml`. Use one OpenCV distribution:
 `opencv-python-headless`.
 
-The archived reference recorded **14.1 minutes of stage computation**, excluding
-startup and verification. This is an observed runtime, not a controlled benchmark.
+The recorded execution took **14.2 minutes of stage computation**, excluding startup
+and verification. Runtime depends on hardware and system load.
 Logs and `run_manifest.json` record stage outcomes, timings, settings, source/input
 hashes, library versions and artifact hashes. PDF typesetting is separate.
 
@@ -105,20 +105,22 @@ Key decisions:
 
 ## Results
 
-Numerical results in this section describe the **submitted model archive** and
-match the accompanying report.
+Recorded execution: **4 November 2026**, Python 3.13.5, macOS arm64, four OpenCV
+threads. All eight pipeline stages completed and saved-output verification passed.
 
 | Evidence | Recorded result |
 |---|---|
 | Calibration | 22/22 boards; fit RMS 0.528 px; mean held-out RMS 0.608 px |
 | Registered wound photographs | 23/23 |
-| Sparse landmarks | 12,403 raw; 3,509 exported with observations in at least three views |
-| Accepted depth maps / dense points | 21 / 2,647,657 |
-| Mesh vertices / triangles | 158,786 / 298,961 |
+| Sparse landmarks | 12,353 raw; 3,481 exported with observations in at least three views |
+| Accepted depth maps / dense points | 22 / 2,876,364 |
+| Dense inspection cloud | 553,189 points |
+| Mesh vertices / triangles | 150,887 / 285,063 |
 | Components / non-manifold edges | 1 / 0 |
-| Open edges touching saved wound mask | 0; outer boundaries remain open |
-| Normal/winding agreement, faces / area | 99.61% / 99.70% |
-| Sparse-to-mesh median distance | 0.26% of wound length within the mesh footprint |
+| Open edges | 20,621 total; 0 touching the saved wound mask |
+| Normal/winding agreement, faces / area | 99.45% / 99.57% |
+| Sparse-to-mesh distance within footprint | Median 0.257% of wound length; P95 1.158% |
+| Hashed inspection renders | 5 PNGs |
 
 Sparse-to-mesh agreement is internal consistency under shared camera/image
 assumptions; it is not independent surface accuracy. Zero wound-mask open edges is
@@ -162,14 +164,14 @@ and compared on common held-out associations with disjoint pose/scoring partitio
 
 ### Experimental wound descriptors
 
-For nominal wound length **L = 3.718 reconstruction units**:
+For nominal wound length **L = 3.730 reconstruction units**:
 
 | Descriptor | Nominal | Definition sensitivity |
 |---|---|---|
-| Width | 0.517 L | 0.508–0.518 L |
-| Projected area | 0.384 L² | 0.323–0.394 L² |
-| Depth P99 | 0.0327 L | 0.0291–0.0473 L |
-| Volume below fitted reference | 0.0070 L³ | 0.0047–0.0111 L³ |
+| Width | 0.517 L | 0.497–0.517 L |
+| Projected area | 0.373 L² | 0.336–0.394 L² |
+| Depth P99 | 0.02996 L | 0.02868–0.05012 L |
+| Volume below fitted reference | 0.005905 L³ | 0.004734–0.011916 L³ |
 
 Each variant uses its own wound length. These one-at-a-time ranges are not confidence
 intervals. Depth is measured along canonical z; P99 is the projected-area-weighted
@@ -178,9 +180,10 @@ and the boundary is unreviewed. These are not validated clinical measurements.
 
 ## Inspect outputs
 
-Paths below are relative to the selected output directory. Original photographs,
-full reconstruction files and reports are delivered separately. Only the three
-curated gallery previews are included here.
+Paths below are relative to the selected output directory. Full geometry is
+produced by the pipeline; the repository includes three rendered previews in
+`assets/previews/`. Input photographs and full reconstruction files are excluded
+from version control.
 
 | Artifact | Purpose |
 |---|---|
@@ -208,11 +211,13 @@ geometry defects.
 ## Physical scale
 
 Scaling the scene and camera positions together preserves monocular projections.
-The brief describes a known-size reference, but its identity/dimension was not
-established. The checkerboard is absent from the wound views and its square size
-was unspecified. Visual inspection and searches over eight ArUco/AprilTag dictionaries
-found no verified scene reference; a negative coded-marker search cannot rule out
-an uncoded reference. Metric scale therefore remains an unmet requirement.
+A verified physical length is therefore required for metric scale. No reference
+with a confirmed size was established in the wound photographs. The calibration
+board is absent from those views and its square size was unspecified.
+
+A search over eight ArUco/AprilTag dictionaries found no coded marker; this does not
+exclude an uncoded reference. A verified manufacturer dimension or measurement
+between identifiable, rigid features of the moulage can provide a scale source.
 
 Set one source in `configs/default.yaml`, then run the full pipeline into a new
 output directory:
@@ -260,34 +265,18 @@ Use each run's own measurements when preparing its report.
 |---|---|
 | Bundle-adjustment acceptance | Evaluate candidates on copied camera, pose and point state. Rejection or validation exceptions preserve retained state. Report candidate and retained RMS separately and reject negative solver statuses. |
 | Render integrity | Writers and artifact inventories share the same folder mapping and hash all five PNGs. A real-renderer regression alters a copied PNG and requires verification to fail. |
-| Stereo support | Try ranked reserves until six usable partners are found or candidates are exhausted. Keep disparity, agreement and TSDF support thresholds unchanged. |
+| Stereo support | Try ranked reserves until six usable partners are found or candidates are exhausted. Apply the configured disparity, agreement and TSDF support thresholds. |
 
-No rejected adjustment was recorded in the submitted archive, so a rollback effect
-on its geometry was not demonstrated. Missing screenshot hashes weakened integrity
-checks without changing coordinates. Reserve matching changes coverage and can
-change the derived descriptors.
+### Repeating the experiment
 
-### Recorded runs
+Use the pinned environment, input image bytes, configuration and thread count.
+Randomised steps are seeded, but native numerical execution and threshold decisions
+can still change the camera solution, accepted support and output counts. Compare
+coverage, topology and descriptor definitions alongside numerical values; the
+recorded metrics are individual run results, not predefined acceptance tolerances.
 
-All four runs used the same input hashes, macOS arm64 and Python 3.13.5. Each completed
-all eight stages and has saved passing verification. L is each run's nominal wound
-length. These outcomes are not reproduction tolerances or physical-accuracy bounds.
-
-| Evidence | Submitted archive | Corrected archive | Submitted repeat | Corrected repeat |
-|---|---:|---:|---:|---:|
-| Date (2026) | 28 Oct | 28 Oct | 4 Nov | 4 Nov |
-| Accepted depth maps | 21 | 22 | 20 | 22 |
-| Dense points | 2,647,657 | 2,894,366 | 2,578,291 | 2,876,364 |
-| Mesh vertices / triangles | 158,786 / 298,961 | 155,647 / 292,891 | 152,964 / 288,545 | 150,887 / 285,063 |
-| Relative depth P99 / L | 0.03273 | 0.03008 | 0.03112 | 0.02996 |
-| Relative volume / L³ | 0.006977 | 0.005936 | 0.006260 | 0.005905 |
-| Hashed render PNGs | 0 | 5 | 0 | 5 |
-
-All registered 23/23 photographs with zero open edges touching the saved wound mask;
-physical scale remained unresolved and measurement status remained uncertain.
-Between archived runs, P99 changed -8.1% and volume -14.9%. Full reruns are not a
-controlled ablation: numerical optimisation and threshold decisions also affect
-poses and downstream support. Lower descriptors do not establish better accuracy.
+Verification establishes saved-file integrity and configured software/geometry
+checks. Independent reference geometry is needed to measure physical accuracy.
 
 ## Development
 
@@ -329,7 +318,7 @@ available in the repository. Source-checkout wrappers for all three commands are
 
 ```text
 .github/workflows/quality.yml  automated source and package checks
-assets/previews/              three submitted-run inspection renders
+assets/previews/              three recorded-run inspection renders
 configs/default.yaml          pipeline settings
 src/woundrecon/                numerical modules, CLI and stage orchestration
   stages/                     audit, calibrate, sfm, dense, mesh, scale, measure, render
@@ -347,17 +336,19 @@ geometry and measurement. `provenance.py` and `reuse.py` bind dependencies;
 
 ## Limitations and next steps
 
-The main gaps are verified scale and independent surface truth. Peripheral
-calibration uncertainty, unlocked focus/exposure, specular regions, possible motion
-and unreviewed boundary/reference definitions also limit measurements. Point count
-and visual smoothness are not accuracy evidence.
+| Limitation | Observed consequence | Next step |
+|---|---|---|
+| Unverified scene scale | Length, area and volume remain in reconstruction units | Measure a rigid in-scene reference and validate on a separate length |
+| Peripheral calibration uncertainty | Distortion extrapolation is unstable near sensor corners | Use a rigid target with varied tilt, distance and edge/corner coverage at the intended focus |
+| Limited stereo feasibility | One registered photograph has no accepted depth map because every attempted partner exceeded the disparity-search budget | Investigate pose/orientation and acquisition geometry; assess wider search against memory/runtime cost |
+| Incomplete observation support | Outer boundaries remain open and irregular | Improve viewpoint coverage and evaluate completeness against reference geometry |
+| Heuristic boundary and inferred intact surface | Depth/volume depend on the definition; measurement status remains uncertain | Obtain expert-reviewed boundaries and measured phantom geometry |
+| One phantom and capture setting | Generalisation to clinical scenes is untested | Evaluate diverse authorised captures across sessions, operators and devices |
 
-Priorities: identify/measure an in-scene reference; improve rigid-target calibration
-with edge/tilt coverage at the intended focus distance; obtain reference phantom
-geometry and reviewed boundaries. Then quantify surface error, completeness and
-repeatability across sessions/operators using common regions and matched resolution.
-Agree acceptance tolerances before comparing methods and request recapture when
-observation support is inadequate.
+Unlocked focus/exposure, specular regions and possible motion can also affect
+correspondence and shape. Point count and smooth appearance do not establish
+accuracy. Define error/completeness tolerances before benchmarking, and request
+recapture when observation support is inadequate.
 
 ## Methods and tools
 
