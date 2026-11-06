@@ -1,27 +1,53 @@
 name: Source quality
+
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   synthetic-checks:
+    name: Python 3.13 · source and package
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MPLBACKEND: Agg
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - name: Check out source
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
         with:
           python-version: '3.13'
           cache: pip
+          cache-dependency-path: |
+            requirements.lock.txt
+            pyproject.toml
       - name: Install pinned development environment
         run: |
           python -m pip install -r requirements.lock.txt
           python -m pip install --no-deps -e '.[dev]'
+          python -m pip check
       - name: Static analysis
         run: |
           ruff check src tests scripts
           ruff format --check src tests scripts
       - name: Synthetic regression suite
-        env:
-          MPLBACKEND: Agg
         run: python -m pytest -q
+      - name: Build wheel
+        run: python -m pip wheel --no-deps --no-build-isolation --wheel-dir dist .
+      - name: Verify installed wheel and commands
+        run: |
+          python -m pip install --no-deps --force-reinstall dist/*.whl
+          cd "$RUNNER_TEMP"
+          python -c "from importlib.resources import files; assert files('woundrecon').joinpath('resources/default.yaml').is_file()"
+          wound-reconstruct --help
+          wound-verify --help
+          wound-export --help

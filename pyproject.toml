@@ -9,11 +9,26 @@ description = "CPU photogrammetry with calibrated cameras, supported surfaces an
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [{name = "Dilip Goswami"}]
-dependencies = [
-  "numpy==2.3.1", "scipy==1.18.1", "opencv-python-headless==5.0.0.93",
-  "scikit-image==0.26.0", "matplotlib==3.11.2", "pyyaml==6.0.3",
-  "pillow==13.0.0", "pypdf==6.21.2"
+keywords = ["photogrammetry", "camera-calibration", "3d-reconstruction", "computer-vision"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Image Processing",
 ]
+dependencies = [
+  "numpy==2.3.1",
+  "scipy==1.18.1",
+  "opencv-python-headless==5.0.0.93",
+  "scikit-image==0.26.0",
+  "matplotlib==3.11.2",
+  "pyyaml==6.0.3",
+  "pillow==13.0.0",
+  "pypdf==6.21.2",
+]
+
+[project.urls]
+Repository = "https://github.com/goapu/araias-wound-reconstruction"
+Documentation = "https://github.com/goapu/araias-wound-reconstruction#quick-start"
 
 [project.optional-dependencies]
 dev = ["pytest==9.1.1", "ruff==0.17.2"]

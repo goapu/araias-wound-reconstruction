@@ -47,3 +47,8 @@ dist/
 *.pem
 *.key
 reference.json
+
+# Curated submitted-run previews displayed in the README
+!assets/previews/05_textured_oblique.png
+!assets/previews/02_geometry_oblique.png
+!assets/previews/03_wound_depth.png
